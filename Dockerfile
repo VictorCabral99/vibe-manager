@@ -4,6 +4,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
+ENV NO_UPDATE_NOTIFIER=1
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
