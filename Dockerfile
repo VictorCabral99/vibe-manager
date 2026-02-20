@@ -32,7 +32,7 @@ ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npm run build
 
 # ─────────────────────────────────────────────
-# Stage 3 — Runner (imagem mínima)
+# Stage 3 — Runner
 # ─────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
@@ -50,15 +50,15 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Prisma CLI + client (necessário para migrate deploy no entrypoint)
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma          ./node_modules/prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma         ./node_modules/@prisma
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma         ./node_modules/.prisma
-COPY --from=builder --chown=nextjs:nodejs /app/prisma                       ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts             ./prisma.config.ts
+# node_modules completo do builder — necessário para a CLI do Prisma (migrate deploy)
+# que puxa @prisma/dev, valibot, hono e outras dezenas de deps transitivas.
+# O standalone sobrescreve node_modules com o mínimo; este COPY garante que
+# tudo que a CLI precisa está disponível.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
-# dotenv (usado pelo prisma.config.ts)
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/dotenv          ./node_modules/dotenv
+# Schema e config do Prisma para o migrate deploy
+COPY --from=builder --chown=nextjs:nodejs /app/prisma          ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 
 # Entrypoint (migrations + start)
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
