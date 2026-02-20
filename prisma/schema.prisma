@@ -1,0 +1,522 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+  VIEWER
+}
+
+enum ProductType {
+  MATERIAL
+  TOOL
+}
+
+enum MeasurementUnit {
+  UNIT
+  KG
+  METER
+  LITER
+  BOX
+  PACKAGE
+}
+
+enum QuoteStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+enum ExpenseType {
+  MATERIAL
+  LABOR
+  OTHER
+}
+
+enum StockEntryType {
+  PURCHASE
+  MANUAL
+  RETURN
+}
+
+enum CashFlowType {
+  QUOTE_RECEIVABLE
+  PURCHASE_PAYABLE
+  LABOR_PAYABLE
+  EXTERNAL_PAYABLE
+  OTHER
+}
+
+enum CashFlowDirection {
+  IN
+  OUT
+}
+
+enum CashFlowStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum AlertPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  RESOLVED
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: PESSOAS
+// ─────────────────────────────────────────────
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  name        String
+  role        Role      @default(EMPLOYEE)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  employee        Employee?
+  auditLogs       AuditLog[]
+  quotesCreated   Quote[]          @relation("QuoteCreatedBy")
+  statusLogs      QuoteStatusLog[]
+  projectsCreated Project[]        @relation("ProjectCreatedBy")
+  expensesCreated ProjectExpense[] @relation("ExpenseCreatedBy")
+  laborEntries    LaborEntry[]     @relation("LaborRegisteredBy")
+  stockEntries    StockEntry[]
+  stockExits      StockExit[]
+  toolLoans       ToolLoan[]       @relation("ToolLoanRegisteredBy")
+  cashFlowEntries CashFlowEntry[]
+  alertsCreated   Alert[]          @relation("AlertCreatedBy")
+
+  @@map("users")
+}
+
+model Employee {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id])
+  name             String
+  cpf              String?   @unique
+  phone            String?
+  jobTitle         String
+  canPurchase      Boolean   @default(false)
+  canWithdrawStock Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  purchases Purchase[]
+  toolLoans ToolLoan[] @relation("ToolLoanEmployee")
+  alerts    Alert[]    @relation("AlertAssignedTo")
+
+  @@map("employees")
+}
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  document  String?
+  address   String?
+  notes     String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  quotes   Quote[]
+  projects Project[]
+
+  @@map("clients")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: CATÁLOGO
+// ─────────────────────────────────────────────
+
+model Product {
+  id           String          @id @default(cuid())
+  name         String
+  description  String?
+  category     String
+  unit         MeasurementUnit @default(UNIT)
+  type         ProductType     @default(MATERIAL)
+  minimumStock Int             @default(0)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  deletedAt    DateTime?
+
+  quoteItems    QuoteItem[]
+  purchaseItems PurchaseItem[]
+  stockEntries  StockEntry[]
+  stockExits    StockExit[]
+  toolLoans     ToolLoan[]
+  alerts        Alert[]        @relation("AlertProduct")
+
+  @@map("products")
+}
+
+model Service {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  basePrice   Decimal?  @db.Decimal(10, 2)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  quoteServices QuoteService[]
+
+  @@map("services")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: COMERCIAL — ORÇAMENTOS
+// ─────────────────────────────────────────────
+
+model Quote {
+  id          String      @id @default(cuid())
+  clientId    String
+  client      Client      @relation(fields: [clientId], references: [id])
+  status      QuoteStatus @default(PENDING)
+  applyFee    Boolean     @default(false)
+  notes       String?
+  createdById String
+  createdBy   User        @relation("QuoteCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  items         QuoteItem[]
+  services      QuoteService[]
+  statusLogs    QuoteStatusLog[]
+  project       Project?
+  cashFlowEntry CashFlowEntry?
+
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id        String  @id @default(cuid())
+  quoteId   String
+  quote     Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Decimal @db.Decimal(10, 3)
+  unitPrice Decimal @db.Decimal(10, 2)
+  total     Decimal @db.Decimal(10, 2)
+
+  @@map("quote_items")
+}
+
+model QuoteService {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id])
+  quantity    Decimal  @default(1) @db.Decimal(10, 3)
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  total       Decimal  @db.Decimal(10, 2)
+  description String?
+
+  @@map("quote_services")
+}
+
+model QuoteStatusLog {
+  id          String       @id @default(cuid())
+  quoteId     String
+  quote       Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  fromStatus  QuoteStatus?
+  toStatus    QuoteStatus
+  changedById String
+  changedBy   User         @relation(fields: [changedById], references: [id])
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  @@map("quote_status_logs")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: PROJETOS
+// ─────────────────────────────────────────────
+
+model Project {
+  id           String        @id @default(cuid())
+  name         String
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id])
+  quoteId      String?       @unique
+  quote        Quote?        @relation(fields: [quoteId], references: [id])
+  totalRevenue Decimal       @db.Decimal(10, 2)
+  targetMargin Decimal       @default(0.60) @db.Decimal(5, 4)
+  status       ProjectStatus @default(ACTIVE)
+  notes        String?
+  createdById  String
+  createdBy    User          @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  startedAt    DateTime      @default(now())
+  closedAt     DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
+  expenses     ProjectExpense[]
+  laborEntries LaborEntry[]
+  stockExits   StockExit[]
+  purchases    Purchase[]
+  alerts       Alert[]
+
+  @@map("projects")
+}
+
+model ProjectExpense {
+  id             String      @id @default(cuid())
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id])
+  type           ExpenseType
+  description    String
+  amount         Decimal     @db.Decimal(10, 2)
+  date           DateTime    @default(now())
+  registeredById String
+  registeredBy   User        @relation("ExpenseCreatedBy", fields: [registeredById], references: [id])
+  purchaseId     String?
+  createdAt      DateTime    @default(now())
+
+  @@map("project_expenses")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: MÃO DE OBRA
+// ─────────────────────────────────────────────
+
+model LaborProfessional {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String?
+  dailyRate Decimal   @db.Decimal(10, 2)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  laborEntries LaborEntry[]
+
+  @@map("labor_professionals")
+}
+
+model LaborEntry {
+  id             String            @id @default(cuid())
+  professionalId String
+  professional   LaborProfessional @relation(fields: [professionalId], references: [id])
+  projectId      String
+  project        Project           @relation(fields: [projectId], references: [id])
+  date           DateTime
+  dailyRate      Decimal           @db.Decimal(10, 2)
+  quantity       Decimal           @default(1) @db.Decimal(10, 2)
+  total          Decimal           @db.Decimal(10, 2)
+  description    String?
+  registeredById String
+  registeredBy   User              @relation("LaborRegisteredBy", fields: [registeredById], references: [id])
+  createdAt      DateTime          @default(now())
+
+  cashFlowEntry CashFlowEntry?
+
+  @@map("labor_entries")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: COMPRAS
+// ─────────────────────────────────────────────
+
+model Purchase {
+  id          String    @id @default(cuid())
+  buyerId     String
+  buyer       Employee  @relation(fields: [buyerId], references: [id])
+  supplier    String?
+  date        DateTime
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  totalAmount Decimal   @db.Decimal(10, 2)
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items         PurchaseItem[]
+  cashFlowEntry CashFlowEntry?
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Decimal  @db.Decimal(10, 3)
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  total      Decimal  @db.Decimal(10, 2)
+
+  stockEntry StockEntry?
+
+  @@map("purchase_items")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: ESTOQUE
+// ─────────────────────────────────────────────
+
+model StockEntry {
+  id             String         @id @default(cuid())
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id])
+  quantity       Decimal        @db.Decimal(10, 3)
+  type           StockEntryType
+  purchaseItemId String?        @unique
+  purchaseItem   PurchaseItem?  @relation(fields: [purchaseItemId], references: [id])
+  registeredById String
+  registeredBy   User           @relation(fields: [registeredById], references: [id])
+  notes          String?
+  createdAt      DateTime       @default(now())
+
+  @@map("stock_entries")
+}
+
+model StockExit {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  quantity       Decimal  @db.Decimal(10, 3)
+  projectId      String?
+  project        Project? @relation(fields: [projectId], references: [id])
+  registeredById String
+  registeredBy   User     @relation(fields: [registeredById], references: [id])
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  @@map("stock_exits")
+}
+
+model ToolLoan {
+  id             String    @id @default(cuid())
+  productId      String
+  product        Product   @relation(fields: [productId], references: [id])
+  quantity       Decimal   @db.Decimal(10, 3)
+  employeeId     String
+  employee       Employee  @relation("ToolLoanEmployee", fields: [employeeId], references: [id])
+  projectId      String?
+  loanedAt       DateTime  @default(now())
+  returnedAt     DateTime?
+  registeredById String
+  registeredBy   User      @relation("ToolLoanRegisteredBy", fields: [registeredById], references: [id])
+  notes          String?
+  createdAt      DateTime  @default(now())
+
+  @@map("tool_loans")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: FINANCEIRO
+// ─────────────────────────────────────────────
+
+model CashFlowEntry {
+  id           String            @id @default(cuid())
+  type         CashFlowType
+  direction    CashFlowDirection
+  description  String
+  amount       Decimal           @db.Decimal(10, 2)
+  dueDate      DateTime
+  paidAt       DateTime?
+  status       CashFlowStatus    @default(PENDING)
+  quoteId      String?           @unique
+  quote        Quote?            @relation(fields: [quoteId], references: [id])
+  purchaseId   String?           @unique
+  purchase     Purchase?         @relation(fields: [purchaseId], references: [id])
+  laborEntryId String?           @unique
+  laborEntry   LaborEntry?       @relation(fields: [laborEntryId], references: [id])
+  createdById  String
+  createdBy    User              @relation(fields: [createdById], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@map("cash_flow_entries")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: OPERAÇÃO / ALERTAS
+// ─────────────────────────────────────────────
+
+model Alert {
+  id           String        @id @default(cuid())
+  title        String
+  description  String?
+  priority     AlertPriority @default(MEDIUM)
+  status       AlertStatus   @default(ACTIVE)
+  projectId    String?
+  project      Project?      @relation(fields: [projectId], references: [id])
+  productId    String?
+  product      Product?      @relation("AlertProduct", fields: [productId], references: [id])
+  assignedToId String?
+  assignedTo   Employee?     @relation("AlertAssignedTo", fields: [assignedToId], references: [id])
+  resolvedAt   DateTime?
+  createdById  String
+  createdBy    User          @relation("AlertCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("alerts")
+}
+
+// ─────────────────────────────────────────────
+// DOMÍNIO: AUDITORIA (transversal)
+// ─────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}

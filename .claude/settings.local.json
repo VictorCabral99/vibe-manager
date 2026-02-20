@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" npm run db:generate:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" npm install:*)",
+      "Bash(npm install:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" npx tsc:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" npx shadcn@latest add:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" /home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin/npx tsc:*)",
+      "Bash(SHELL=/bin/sh PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" /home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin/node /home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin/tsc:*)",
+      "Bash(SHELL=/bin/sh PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" /home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin/node:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" /home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin/node /var/home/victor/Documentos/Projects/vibe-coding/node_modules/.bin/tsc:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" cat:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" grep:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" node:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(export PATH:*)",
+      "Bash(node node_modules/.bin/tsc:*)",
+      "Bash(node node_modules/.bin/vitest:*)",
+      "Bash(PATH=\"/home/victor/.var/app/com.vscodium.codium/config/nvm/versions/node/v24.13.1/bin:$PATH\" npm test:*)"
+    ]
+  }
+}
