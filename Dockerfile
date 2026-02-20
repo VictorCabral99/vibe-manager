@@ -60,7 +60,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts             ./pr
 
 # dotenv (usado pelo prisma.config.ts)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/dotenv          ./node_modules/dotenv
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules/dotenv-expand   ./node_modules/dotenv-expand
 
 # Entrypoint (migrations + start)
 COPY --chown=nextjs:nodejs docker-entrypoint.sh ./
