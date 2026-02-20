@@ -23,6 +23,11 @@ RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# DATABASE_URL placeholder só para satisfazer a inicialização do módulo Prisma
+# durante o build. Nenhuma conexão real é feita (páginas são force-dynamic).
+# O valor real é injetado pelo Render em runtime via variável de ambiente.
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+
 # Build do Next.js (standalone)
 RUN npm run build
 
