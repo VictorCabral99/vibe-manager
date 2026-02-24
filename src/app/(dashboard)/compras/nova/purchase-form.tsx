@@ -166,14 +166,14 @@ export function PurchaseForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Projeto (opcional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={(val) => field.onChange(val === "none" ? "" : val)} value={field.value || "none"}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Vincular a um projeto" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">Nenhum projeto</SelectItem>
+                    <SelectItem value="none">Nenhum projeto</SelectItem>
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}
