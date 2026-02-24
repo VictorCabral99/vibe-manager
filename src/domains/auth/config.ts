@@ -68,6 +68,7 @@ export const authConfig: NextAuthConfig = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 8 * 60 * 60, // 8 horas
+    maxAge: 30 * 24 * 60 * 60,  // 30 dias
+    updateAge: 24 * 60 * 60,    // renova o token 1x por dia se o usuário estiver ativo
   },
 }
