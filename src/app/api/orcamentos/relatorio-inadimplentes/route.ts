@@ -2,10 +2,6 @@ import { NextResponse } from "next/server"
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer"
 import React, { type ReactElement } from "react"
 import { auth } from "@/auth"
-import {
-  findPendingQuotesOlderThan30Days,
-  findOverdueClients,
-} from "@/domains/comercial/orcamentos/queries"
 import { prisma } from "@/lib/prisma"
 import { QuoteStatus } from "@prisma/client"
 import {
@@ -21,6 +17,21 @@ function daysOverdue(createdAt: Date): number {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24))
 }
 
+const quoteInclude = {
+  client: { select: { id: true, name: true, email: true, phone: true } },
+  items:    { select: { total: true } },
+  services: { select: { total: true } },
+} as const
+
+function calcTotal(
+  q: { applyFee: boolean; items: { total: { toNumber(): number } }[]; services: { total: { toNumber(): number } }[] }
+): number {
+  const sub =
+    q.items.reduce((s, i) => s + i.total.toNumber(), 0) +
+    q.services.reduce((s, sv) => s + sv.total.toNumber(), 0)
+  return q.applyFee ? sub * 1.15 : sub
+}
+
 export async function GET(): Promise<NextResponse> {
   const session = await auth()
   if (!session?.user) {
@@ -31,24 +42,23 @@ export async function GET(): Promise<NextResponse> {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
   // Orçamentos PENDING > 30 dias
-  const pendingRaw = await findPendingQuotesOlderThan30Days()
+  const pendingRaw = await prisma.quote.findMany({
+    where: { deletedAt: null, status: QuoteStatus.PENDING, createdAt: { lt: thirtyDaysAgo } },
+    include: quoteInclude,
+    orderBy: { createdAt: "asc" },
+  })
   const pendingQuotes: OverdueQuoteItem[] = pendingRaw.map((q) => ({
     id: q.id,
     createdAt: q.createdAt,
     client: q.client,
     daysOverdue: daysOverdue(q.createdAt),
+    totalAmount: calcTotal(q),
   }))
 
   // Orçamentos APPROVED > 30 dias (inadimplentes de fato)
   const approvedRaw = await prisma.quote.findMany({
-    where: {
-      deletedAt: null,
-      status: QuoteStatus.APPROVED,
-      createdAt: { lt: thirtyDaysAgo },
-    },
-    include: {
-      client: { select: { id: true, name: true, email: true, phone: true } },
-    },
+    where: { deletedAt: null, status: QuoteStatus.APPROVED, createdAt: { lt: thirtyDaysAgo } },
+    include: quoteInclude,
     orderBy: { createdAt: "asc" },
   })
   const approvedQuotes: OverdueQuoteItem[] = approvedRaw.map((q) => ({
@@ -56,6 +66,7 @@ export async function GET(): Promise<NextResponse> {
     createdAt: q.createdAt,
     client: q.client,
     daysOverdue: daysOverdue(q.createdAt),
+    totalAmount: calcTotal(q),
   }))
 
   const reportData: OverdueReportData = {

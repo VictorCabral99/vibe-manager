@@ -111,11 +111,13 @@ const styles = StyleSheet.create({
   thName: { flex: 2, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#7f1d1d" },
   thContact: { flex: 2, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#7f1d1d" },
   thDate: { flex: 1, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#7f1d1d" },
+  thValue: { flex: 1, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#7f1d1d", textAlign: "right" },
   thDays: { flex: 1, fontSize: 8, fontFamily: "Helvetica-Bold", color: "#7f1d1d", textAlign: "right" },
 
   tdName: { flex: 2, fontSize: 9, color: "#111827", fontFamily: "Helvetica-Bold" },
   tdContact: { flex: 2, fontSize: 8, color: "#4b5563" },
   tdDate: { flex: 1, fontSize: 9, color: "#6b7280" },
+  tdValue: { flex: 1, fontSize: 9, fontFamily: "Helvetica-Bold", color: "#1d4ed8", textAlign: "right" },
   tdDays: { flex: 1, fontSize: 9, fontFamily: "Helvetica-Bold", color: "#dc2626", textAlign: "right" },
 
   // Footer
@@ -149,6 +151,7 @@ export interface OverdueQuoteItem {
     phone?: string | null
   }
   daysOverdue: number
+  totalAmount: number
 }
 
 export interface OverdueReportData {
@@ -164,6 +167,10 @@ export interface OverdueReportData {
 
 function fmtDate(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR").format(new Date(date))
+}
+
+function fmtCurrency(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
 }
 
 // ─────────────────────────────────────────────
@@ -187,7 +194,8 @@ function QuoteTable({
           <Text style={styles.thName}>Cliente</Text>
           <Text style={styles.thContact}>Contato</Text>
           <Text style={styles.thDate}>Data Orçamento</Text>
-          <Text style={styles.thDays}>Dias em atraso</Text>
+          <Text style={styles.thValue}>Valor</Text>
+          <Text style={styles.thDays}>Em atraso</Text>
         </View>
         {items.map((item, i) => (
           <View
@@ -208,6 +216,7 @@ function QuoteTable({
               )}
             </View>
             <Text style={styles.tdDate}>{fmtDate(item.createdAt)}</Text>
+            <Text style={styles.tdValue}>{fmtCurrency(item.totalAmount)}</Text>
             <Text style={styles.tdDays}>{item.daysOverdue}d</Text>
           </View>
         ))}
@@ -218,6 +227,8 @@ function QuoteTable({
 
 export function OverdueReportDocument({ data }: { data: OverdueReportData }) {
   const totalOverdue = data.pendingQuotes.length + data.approvedQuotes.length
+  const totalAtRisk =
+    [...data.pendingQuotes, ...data.approvedQuotes].reduce((s, q) => s + q.totalAmount, 0)
 
   return (
     <Document title="Relatório de Inadimplentes" author={data.companyName}>
@@ -238,9 +249,9 @@ export function OverdueReportDocument({ data }: { data: OverdueReportData }) {
         {/* Resumo */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total</Text>
+            <Text style={styles.summaryLabel}>Total de orçamentos</Text>
             <Text style={styles.summaryValue}>{totalOverdue}</Text>
-            <Text style={styles.summaryDesc}>orçamentos em atraso (+30 dias)</Text>
+            <Text style={styles.summaryDesc}>em atraso (+30 dias)</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Pendentes aprovação</Text>
@@ -251,6 +262,13 @@ export function OverdueReportDocument({ data }: { data: OverdueReportData }) {
             <Text style={styles.summaryLabel}>Aprovados não pagos</Text>
             <Text style={styles.summaryValue}>{data.approvedQuotes.length}</Text>
             <Text style={styles.summaryDesc}>aceitos mas sem pagamento</Text>
+          </View>
+          <View style={[styles.summaryCard, { borderLeftColor: "#1d4ed8", backgroundColor: "#eff6ff" }]}>
+            <Text style={[styles.summaryLabel, { color: "#1e3a8a" }]}>Valor em risco</Text>
+            <Text style={[styles.summaryValue, { fontSize: 13, color: "#1d4ed8" }]}>
+              {fmtCurrency(totalAtRisk)}
+            </Text>
+            <Text style={styles.summaryDesc}>total dos orçamentos em aberto</Text>
           </View>
         </View>
 
