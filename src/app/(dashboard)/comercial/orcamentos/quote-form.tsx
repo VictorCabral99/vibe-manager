@@ -1,9 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useForm, useFieldArray } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
 import { MeasurementUnit } from "@prisma/client"
 import { Plus, Trash2, Package, Wrench } from "lucide-react"
 import { toast } from "sonner"
@@ -22,17 +20,10 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form"
-import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -47,14 +38,11 @@ import {
 
 import { formatCurrency } from "@/lib/format"
 import { calculateQuoteTotals } from "@/domains/comercial/orcamentos/calculations"
-import {
-  createQuoteSchema,
-  updateQuoteSchema,
-  type CreateQuoteInput,
-  type UpdateQuoteInput,
-} from "@/domains/comercial/orcamentos/schemas"
 import type { QuoteItemInput, QuoteServiceInput } from "@/domains/comercial/orcamentos/types"
 import { createQuoteAction, updateQuoteAction } from "@/domains/comercial/orcamentos/actions"
+import { QuickCreateClientDialog } from "@/components/quick-create/quick-create-client-dialog"
+import { QuickCreateProductDialog } from "@/components/quick-create/quick-create-product-dialog"
+import { QuickCreateServiceDialog } from "@/components/quick-create/quick-create-service-dialog"
 
 // ─────────────────────────────────────────────
 // Tipos das props
@@ -110,12 +98,14 @@ interface QuoteFormProps {
 interface AddItemRowProps {
   products: ProductOption[]
   onAdd: (item: { productId: string; quantity: number; unitPrice: number }) => void
+  onProductCreated: (product: ProductOption) => void
 }
 
-function AddItemRow({ products, onAdd }: AddItemRowProps) {
+function AddItemRow({ products, onAdd, onProductCreated }: AddItemRowProps) {
   const [productId, setProductId] = useState("")
   const [quantity, setQuantity] = useState("")
   const [unitPrice, setUnitPrice] = useState("")
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   const selectedProduct = products.find((p) => p.id === productId)
 
@@ -133,54 +123,79 @@ function AddItemRow({ products, onAdd }: AddItemRowProps) {
   }
 
   return (
-    <div className="flex gap-2 items-end flex-wrap">
-      <div className="flex-1 min-w-48">
-        <Label className="text-xs text-muted-foreground mb-1 block">Produto</Label>
-        <Select value={productId} onValueChange={setProductId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecionar produto..." />
-          </SelectTrigger>
-          <SelectContent>
-            {products.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
+    <>
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="flex-1 min-w-48">
+          <Label className="text-xs text-muted-foreground mb-1 block">Produto</Label>
+          <Select
+            value={productId}
+            onValueChange={(val) => {
+              if (val === "__create__") {
+                setDialogOpen(true)
+              } else {
+                setProductId(val)
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecionar produto..." />
+            </SelectTrigger>
+            <SelectContent>
+              {products.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <SelectItem value="__create__" className="text-primary font-medium">
+                <Plus className="size-3 mr-1 inline-block" />
+                Novo produto
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-28">
+          <Label className="text-xs text-muted-foreground mb-1 block">
+            Qtd {selectedProduct ? `(${selectedProduct.unit})` : ""}
+          </Label>
+          <Input
+            type="number"
+            min="0.001"
+            step="0.001"
+            placeholder="1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
+
+        <div className="w-36">
+          <Label className="text-xs text-muted-foreground mb-1 block">Preço Unit. (R$)</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0,00"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+          />
+        </div>
+
+        <Button type="button" variant="outline" onClick={handleAdd}>
+          <Plus className="size-4 mr-1" />
+          Adicionar
+        </Button>
       </div>
 
-      <div className="w-28">
-        <Label className="text-xs text-muted-foreground mb-1 block">
-          Qtd {selectedProduct ? `(${selectedProduct.unit})` : ""}
-        </Label>
-        <Input
-          type="number"
-          min="0.001"
-          step="0.001"
-          placeholder="1"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-        />
-      </div>
-
-      <div className="w-36">
-        <Label className="text-xs text-muted-foreground mb-1 block">Preço Unit. (R$)</Label>
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0,00"
-          value={unitPrice}
-          onChange={(e) => setUnitPrice(e.target.value)}
-        />
-      </div>
-
-      <Button type="button" variant="outline" onClick={handleAdd}>
-        <Plus className="size-4 mr-1" />
-        Adicionar
-      </Button>
-    </div>
+      <QuickCreateProductDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={(product) => {
+          onProductCreated(product)
+          setProductId(product.id)
+        }}
+      />
+    </>
   )
 }
 
@@ -196,13 +211,15 @@ interface AddServiceRowProps {
     unitPrice: number
     description?: string
   }) => void
+  onServiceCreated: (service: ServiceOption) => void
 }
 
-function AddServiceRow({ services, onAdd }: AddServiceRowProps) {
+function AddServiceRow({ services, onAdd, onServiceCreated }: AddServiceRowProps) {
   const [serviceId, setServiceId] = useState("")
   const [quantity, setQuantity] = useState("1")
   const [unitPrice, setUnitPrice] = useState("")
   const [description, setDescription] = useState("")
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   function handleServiceSelect(id: string) {
     setServiceId(id)
@@ -232,61 +249,89 @@ function AddServiceRow({ services, onAdd }: AddServiceRowProps) {
   }
 
   return (
-    <div className="flex gap-2 items-end flex-wrap">
-      <div className="flex-1 min-w-48">
-        <Label className="text-xs text-muted-foreground mb-1 block">Serviço</Label>
-        <Select value={serviceId} onValueChange={handleServiceSelect}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecionar serviço..." />
-          </SelectTrigger>
-          <SelectContent>
-            {services.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
+    <>
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="flex-1 min-w-48">
+          <Label className="text-xs text-muted-foreground mb-1 block">Serviço</Label>
+          <Select
+            value={serviceId}
+            onValueChange={(val) => {
+              if (val === "__create__") {
+                setDialogOpen(true)
+              } else {
+                handleServiceSelect(val)
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecionar serviço..." />
+            </SelectTrigger>
+            <SelectContent>
+              {services.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <SelectItem value="__create__" className="text-primary font-medium">
+                <Plus className="size-3 mr-1 inline-block" />
+                Novo serviço
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-24">
+          <Label className="text-xs text-muted-foreground mb-1 block">Qtd</Label>
+          <Input
+            type="number"
+            min="0.001"
+            step="0.001"
+            placeholder="1"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+        </div>
+
+        <div className="w-36">
+          <Label className="text-xs text-muted-foreground mb-1 block">Preço Unit. (R$)</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="0,00"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+          />
+        </div>
+
+        <div className="flex-1 min-w-40">
+          <Label className="text-xs text-muted-foreground mb-1 block">Descrição (opcional)</Label>
+          <Input
+            placeholder="Descrição adicional..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        <Button type="button" variant="outline" onClick={handleAdd}>
+          <Plus className="size-4 mr-1" />
+          Adicionar
+        </Button>
       </div>
 
-      <div className="w-24">
-        <Label className="text-xs text-muted-foreground mb-1 block">Qtd</Label>
-        <Input
-          type="number"
-          min="0.001"
-          step="0.001"
-          placeholder="1"
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-        />
-      </div>
-
-      <div className="w-36">
-        <Label className="text-xs text-muted-foreground mb-1 block">Preço Unit. (R$)</Label>
-        <Input
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="0,00"
-          value={unitPrice}
-          onChange={(e) => setUnitPrice(e.target.value)}
-        />
-      </div>
-
-      <div className="flex-1 min-w-40">
-        <Label className="text-xs text-muted-foreground mb-1 block">Descrição (opcional)</Label>
-        <Input
-          placeholder="Descrição adicional..."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-
-      <Button type="button" variant="outline" onClick={handleAdd}>
-        <Plus className="size-4 mr-1" />
-        Adicionar
-      </Button>
-    </div>
+      <QuickCreateServiceDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={(service) => {
+          onServiceCreated(service)
+          setServiceId(service.id)
+          if (service.basePrice) {
+            setUnitPrice(service.basePrice.toNumber().toFixed(2))
+          }
+        }}
+      />
+    </>
   )
 }
 
@@ -299,6 +344,11 @@ type FormMode = "create" | "edit"
 export function QuoteForm({ clients, products, services, defaultValues }: QuoteFormProps) {
   const router = useRouter()
   const mode: FormMode = defaultValues ? "edit" : "create"
+
+  // Listas locais mutáveis (para adicionar itens criados inline)
+  const [clientList, setClientList] = useState<ClientOption[]>(clients)
+  const [productList, setProductList] = useState<ProductOption[]>(products)
+  const [serviceList, setServiceList] = useState<ServiceOption[]>(services)
 
   // Lista de itens e serviços (gerenciados manualmente para melhor UX)
   const [itemRows, setItemRows] = useState<
@@ -318,18 +368,19 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
   const [clientId, setClientId] = useState(defaultValues?.clientId ?? "")
   const [notes, setNotes] = useState(defaultValues?.notes ?? "")
   const [submitting, setSubmitting] = useState(false)
+  const [clientDialogOpen, setClientDialogOpen] = useState(false)
 
   // Calcula totais em tempo real usando a função do domain
   const itemInputs: QuoteItemInput[] = itemRows.map((r) => ({
     productId: r.productId,
-    productName: products.find((p) => p.id === r.productId)?.name ?? "",
+    productName: productList.find((p) => p.id === r.productId)?.name ?? "",
     quantity: r.quantity,
     unitPrice: r.unitPrice,
   }))
 
   const serviceInputs: QuoteServiceInput[] = serviceRows.map((r) => ({
     serviceId: r.serviceId,
-    serviceName: services.find((s) => s.id === r.serviceId)?.name ?? "",
+    serviceName: serviceList.find((s) => s.id === r.serviceId)?.name ?? "",
     quantity: r.quantity,
     unitPrice: r.unitPrice,
     description: r.description,
@@ -422,16 +473,30 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="clientId">Cliente *</Label>
-              <Select value={clientId} onValueChange={setClientId}>
+              <Select
+                value={clientId}
+                onValueChange={(val) => {
+                  if (val === "__create__") {
+                    setClientDialogOpen(true)
+                  } else {
+                    setClientId(val)
+                  }
+                }}
+              >
                 <SelectTrigger id="clientId">
                   <SelectValue placeholder="Selecionar cliente..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {clients.map((c) => (
+                  {clientList.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
                     </SelectItem>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value="__create__" className="text-primary font-medium">
+                    <Plus className="size-3 mr-1 inline-block" />
+                    Novo cliente
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -473,7 +538,11 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <AddItemRow products={products} onAdd={addItem} />
+          <AddItemRow
+            products={productList}
+            onAdd={addItem}
+            onProductCreated={(p) => setProductList((prev) => [...prev, p])}
+          />
 
           {itemRows.length > 0 && (
             <>
@@ -490,7 +559,7 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
                 </TableHeader>
                 <TableBody>
                   {itemRows.map((row, index) => {
-                    const product = products.find((p) => p.id === row.productId)
+                    const product = productList.find((p) => p.id === row.productId)
                     const lineTotal = row.quantity * row.unitPrice
                     return (
                       <TableRow key={index}>
@@ -537,7 +606,11 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <AddServiceRow services={services} onAdd={addService} />
+          <AddServiceRow
+            services={serviceList}
+            onAdd={addService}
+            onServiceCreated={(s) => setServiceList((prev) => [...prev, s])}
+          />
 
           {serviceRows.length > 0 && (
             <>
@@ -555,7 +628,7 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
                 </TableHeader>
                 <TableBody>
                   {serviceRows.map((row, index) => {
-                    const service = services.find((s) => s.id === row.serviceId)
+                    const service = serviceList.find((s) => s.id === row.serviceId)
                     const lineTotal = row.quantity * row.unitPrice
                     return (
                       <TableRow key={index}>
@@ -644,6 +717,16 @@ export function QuoteForm({ clients, products, services, defaultValues }: QuoteF
               : "Salvar Alterações"}
         </Button>
       </div>
+
+      {/* Dialogs de criação rápida */}
+      <QuickCreateClientDialog
+        open={clientDialogOpen}
+        onOpenChange={setClientDialogOpen}
+        onCreated={(c) => {
+          setClientList((prev) => [...prev, c])
+          setClientId(c.id)
+        }}
+      />
     </form>
   )
 }

@@ -1,9 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { useForm, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { Plus } from "lucide-react"
 import {
   Form,
   FormControl,
@@ -19,19 +21,23 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
 import { createProjectSchema, type CreateProjectInput } from "@/domains/projetos/schemas"
 import { createProjectAction } from "@/domains/projetos/actions"
 import type { ClientListItem } from "@/domains/pessoas/clientes/queries"
+import { QuickCreateClientDialog } from "@/components/quick-create/quick-create-client-dialog"
 
 interface ProjectFormProps {
   clients: ClientListItem[]
 }
 
-export function ProjectForm({ clients }: ProjectFormProps) {
+export function ProjectForm({ clients: initialClients }: ProjectFormProps) {
   const router = useRouter()
+  const [clientList, setClientList] = useState(initialClients)
+  const [clientDialogOpen, setClientDialogOpen] = useState(false)
 
   const form = useForm<CreateProjectInput>({
     resolver: zodResolver(createProjectSchema) as Resolver<CreateProjectInput>,
@@ -82,18 +88,32 @@ export function ProjectForm({ clients }: ProjectFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cliente *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={(val) => {
+                    if (val === "__create__") {
+                      setClientDialogOpen(true)
+                    } else {
+                      field.onChange(val)
+                    }
+                  }}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um cliente" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {clients.map((client) => (
+                    {clientList.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
                         {client.name}
                       </SelectItem>
                     ))}
+                    <SelectSeparator />
+                    <SelectItem value="__create__" className="text-primary font-medium">
+                      <Plus className="size-3 mr-1 inline-block" />
+                      Novo cliente
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -177,6 +197,15 @@ export function ProjectForm({ clients }: ProjectFormProps) {
           </Button>
         </div>
       </form>
+
+      <QuickCreateClientDialog
+        open={clientDialogOpen}
+        onOpenChange={setClientDialogOpen}
+        onCreated={(c) => {
+          setClientList((prev) => [...prev, c as ClientListItem])
+          form.setValue("clientId", c.id)
+        }}
+      />
     </Form>
   )
 }

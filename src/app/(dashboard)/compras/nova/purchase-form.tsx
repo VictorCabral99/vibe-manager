@@ -20,6 +20,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -31,6 +32,7 @@ import type { BuyerItem } from "@/domains/compras/queries"
 import type { ProjectListItem } from "@/domains/projetos/queries"
 import { formatCurrency } from "@/lib/format"
 import { Plus, Trash2 } from "lucide-react"
+import { QuickCreateProductDialog } from "@/components/quick-create/quick-create-product-dialog"
 
 interface Product {
   id: string
@@ -48,12 +50,15 @@ interface PurchaseFormProps {
 
 export function PurchaseForm({
   buyers,
-  products,
+  products: initialProducts,
   projects,
   defaultProjectId,
 }: PurchaseFormProps) {
   const router = useRouter()
   const [total, setTotal] = useState(0)
+  const [productList, setProductList] = useState<Product[]>(initialProducts)
+  const [productDialogOpen, setProductDialogOpen] = useState(false)
+  const [pendingProductIndex, setPendingProductIndex] = useState<number | null>(null)
 
   const form = useForm<CreatePurchaseInput>({
     resolver: zodResolver(createPurchaseSchema) as Resolver<CreatePurchaseInput>,
@@ -220,7 +225,14 @@ export function PurchaseForm({
                       <FormItem>
                         <FormLabel className="text-xs">Produto *</FormLabel>
                         <Select
-                          onValueChange={f.onChange}
+                          onValueChange={(val) => {
+                            if (val === "__create__") {
+                              setPendingProductIndex(index)
+                              setProductDialogOpen(true)
+                            } else {
+                              f.onChange(val)
+                            }
+                          }}
                           value={f.value}
                         >
                           <FormControl>
@@ -229,11 +241,16 @@ export function PurchaseForm({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {products.map((product) => (
+                            {productList.map((product) => (
                               <SelectItem key={product.id} value={product.id}>
                                 {product.name} ({product.unit})
                               </SelectItem>
                             ))}
+                            <SelectSeparator />
+                            <SelectItem value="__create__" className="text-primary font-medium">
+                              <Plus className="size-3 mr-1 inline-block" />
+                              Novo produto
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -357,6 +374,21 @@ export function PurchaseForm({
           </Button>
         </div>
       </form>
+
+      <QuickCreateProductDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        onCreated={(product) => {
+          setProductList((prev) => [
+            ...prev,
+            { id: product.id, name: product.name, unit: product.unit as string, category: product.category },
+          ])
+          if (pendingProductIndex !== null) {
+            form.setValue(`items.${pendingProductIndex}.productId`, product.id)
+            setPendingProductIndex(null)
+          }
+        }}
+      />
     </Form>
   )
 }
