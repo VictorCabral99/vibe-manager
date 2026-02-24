@@ -6,7 +6,7 @@ import { ProjectStatus } from "@prisma/client"
 // ─────────────────────────────────────────────
 
 export async function findAllProjects(status?: ProjectStatus) {
-  return prisma.project.findMany({
+  const rows = await prisma.project.findMany({
     where: {
       deletedAt: null,
       ...(status ? { status } : {}),
@@ -38,6 +38,15 @@ export async function findAllProjects(status?: ProjectStatus) {
     },
     orderBy: { createdAt: "desc" },
   })
+
+  // Converte Decimal → number para compatibilidade com Client Components
+  return rows.map((r) => ({
+    ...r,
+    totalRevenue:  r.totalRevenue.toNumber(),
+    targetMargin:  r.targetMargin.toNumber(),
+    expenses:      r.expenses.map((e) => ({ amount: e.amount.toNumber() })),
+    laborEntries:  r.laborEntries.map((l) => ({ total: l.total.toNumber() })),
+  }))
 }
 
 export type ProjectListItem = Awaited<ReturnType<typeof findAllProjects>>[number]
@@ -108,11 +117,12 @@ export async function findActiveProjects() {
 // ─────────────────────────────────────────────
 
 export async function findActiveLaborProfessionals() {
-  return prisma.laborProfessional.findMany({
+  const rows = await prisma.laborProfessional.findMany({
     where: { deletedAt: null, isActive: true },
     select: { id: true, name: true, dailyRate: true, phone: true },
     orderBy: { name: "asc" },
   })
+  return rows.map((r) => ({ ...r, dailyRate: r.dailyRate.toNumber() }))
 }
 
 export type LaborProfessionalItem = Awaited<ReturnType<typeof findActiveLaborProfessionals>>[number]

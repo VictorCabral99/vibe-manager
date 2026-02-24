@@ -193,9 +193,10 @@ export async function findActiveProducts() {
 }
 
 export async function findActiveServices() {
-  return prisma.service.findMany({
+  const rows = await prisma.service.findMany({
     where: { deletedAt: null, isActive: true },
     select: { id: true, name: true, basePrice: true, description: true },
     orderBy: { name: "asc" },
   })
+  return rows.map((r) => ({ ...r, basePrice: r.basePrice?.toNumber() ?? null }))
 }

@@ -196,7 +196,7 @@ export function CashFlowTable({ entries }: CashFlowTableProps) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono font-medium">
-                    {formatCurrency(entry.amount.toNumber())}
+                    {formatCurrency(entry.amount)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {formatDate(entry.dueDate)}

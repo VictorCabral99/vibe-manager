@@ -11,7 +11,7 @@ interface PurchaseFilters {
 }
 
 export async function findAllPurchases(filters?: PurchaseFilters) {
-  return prisma.purchase.findMany({
+  const rows = await prisma.purchase.findMany({
     where: {
       ...(filters?.buyerId ? { buyerId: filters.buyerId } : {}),
       ...(filters?.fromDate || filters?.toDate
@@ -46,6 +46,9 @@ export async function findAllPurchases(filters?: PurchaseFilters) {
     },
     orderBy: { date: "desc" },
   })
+
+  // Converte Decimal → number para compatibilidade com Client Components
+  return rows.map((r) => ({ ...r, totalAmount: r.totalAmount.toNumber() }))
 }
 
 export type PurchaseListItem = Awaited<ReturnType<typeof findAllPurchases>>[number]

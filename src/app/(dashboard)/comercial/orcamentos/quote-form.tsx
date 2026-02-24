@@ -63,7 +63,7 @@ interface ProductOption {
 interface ServiceOption {
   id: string
   name: string
-  basePrice: { toNumber(): number } | null
+  basePrice: number | null
   description: string | null
 }
 
@@ -225,7 +225,7 @@ function AddServiceRow({ services, onAdd, onServiceCreated }: AddServiceRowProps
     setServiceId(id)
     const svc = services.find((s) => s.id === id)
     if (svc?.basePrice) {
-      setUnitPrice(svc.basePrice.toNumber().toFixed(2))
+      setUnitPrice(svc.basePrice.toFixed(2))
     }
   }
 
@@ -327,7 +327,7 @@ function AddServiceRow({ services, onAdd, onServiceCreated }: AddServiceRowProps
           onServiceCreated(service)
           setServiceId(service.id)
           if (service.basePrice) {
-            setUnitPrice(service.basePrice.toNumber().toFixed(2))
+            setUnitPrice(service.basePrice.toFixed(2))
           }
         }}
       />

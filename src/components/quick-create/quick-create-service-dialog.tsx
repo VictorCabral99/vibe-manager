@@ -16,7 +16,7 @@ import { createServiceAction } from "@/domains/catalogo/servicos/actions"
 interface CreatedService {
   id: string
   name: string
-  basePrice: { toNumber(): number } | null
+  basePrice: number | null
   description: string | null
 }
 
@@ -64,11 +64,10 @@ export function QuickCreateServiceDialog({
     }
 
     toast.success("Serviço criado!")
-    const priceNum = price !== undefined ? price : null
     onCreated({
       id: result.data!.id,
       name: name.trim(),
-      basePrice: priceNum !== null ? { toNumber: () => priceNum } : null,
+      basePrice: price !== undefined ? price : null,
       description: description.trim() || null,
     })
     reset()

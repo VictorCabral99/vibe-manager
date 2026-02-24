@@ -28,7 +28,7 @@ interface CashFlowFilters {
 export async function findAllCashFlowEntries(filters: CashFlowFilters = {}) {
   const { direction, status, fromDate, toDate } = filters
 
-  return prisma.cashFlowEntry.findMany({
+  const rows = await prisma.cashFlowEntry.findMany({
     where: {
       ...(direction !== undefined && { direction }),
       ...(status !== undefined && { status }),
@@ -45,37 +45,28 @@ export async function findAllCashFlowEntries(filters: CashFlowFilters = {}) {
       quote: {
         select: {
           id: true,
-          client: {
-            select: { name: true },
-          },
+          client: { select: { name: true } },
         },
       },
       purchase: {
         select: {
           id: true,
-          buyer: {
-            select: {
-              user: {
-                select: { name: true },
-              },
-            },
-          },
+          buyer: { select: { user: { select: { name: true } } } },
         },
       },
       laborEntry: {
         select: {
           id: true,
-          professional: {
-            select: { name: true },
-          },
+          professional: { select: { name: true } },
         },
       },
-      createdBy: {
-        select: { name: true },
-      },
+      createdBy: { select: { name: true } },
     },
     orderBy: { dueDate: "asc" },
   })
+
+  // Converte Decimal → number para compatibilidade com Client Components
+  return rows.map((r) => ({ ...r, amount: r.amount.toNumber() }))
 }
 
 // ─────────────────────────────────────────────
