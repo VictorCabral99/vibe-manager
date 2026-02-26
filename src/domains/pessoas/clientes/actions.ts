@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createClientSchema,
@@ -13,6 +16,9 @@ import {
 export async function createClientAction(
   data: CreateClientInput
 ): Promise<ActionResult<{ id: string }>> {
+  const guard = await requirePermission(PERMISSIONS.clients.create)
+  if (!guard.user) return guard.error
+
   const parsed = createClientSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -29,6 +35,7 @@ export async function createClientAction(
         notes: parsed.data.notes || null,
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Client", entityId: client.id }).catch(console.error)
     revalidatePath("/pessoas/clientes")
     return { success: true, data: { id: client.id } }
   } catch {
@@ -39,6 +46,9 @@ export async function createClientAction(
 export async function updateClientAction(
   data: UpdateClientInput
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.clients.edit)
+  if (!guard.user) return guard.error
+
   const parsed = updateClientSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -58,6 +68,7 @@ export async function updateClientAction(
         ...(fields.notes !== undefined && { notes: fields.notes || null }),
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Client", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/clientes")
     return { success: true }
   } catch {
@@ -68,6 +79,9 @@ export async function updateClientAction(
 export async function toggleClientActiveAction(
   id: string
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.clients.edit)
+  if (!guard.user) return guard.error
+
   try {
     const client = await prisma.client.findFirst({
       where: { id, deletedAt: null },
@@ -83,6 +97,7 @@ export async function toggleClientActiveAction(
       data: { isActive: !client.isActive },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "TOGGLE_ACTIVE", entity: "Client", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/clientes")
     return { success: true }
   } catch {
@@ -91,11 +106,15 @@ export async function toggleClientActiveAction(
 }
 
 export async function deleteClientAction(id: string): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.clients.delete)
+  if (!guard.user) return guard.error
+
   try {
     await prisma.client.update({
       where: { id },
       data: { deletedAt: new Date() },
     })
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Client", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/clientes")
     return { success: true }
   } catch {

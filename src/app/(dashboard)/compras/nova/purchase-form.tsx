@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useState } from "react"
+import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -20,7 +20,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -33,6 +32,7 @@ import type { ProjectListItem } from "@/domains/projetos/queries"
 import { formatCurrency } from "@/lib/format"
 import { Plus, Trash2 } from "lucide-react"
 import { QuickCreateProductDialog } from "@/components/quick-create/quick-create-product-dialog"
+import { ComboboxWithCreate } from "@/components/ui/combobox-with-create"
 
 interface Product {
   id: string
@@ -55,7 +55,6 @@ export function PurchaseForm({
   defaultProjectId,
 }: PurchaseFormProps) {
   const router = useRouter()
-  const [total, setTotal] = useState(0)
   const [productList, setProductList] = useState<Product[]>(initialProducts)
   const [productDialogOpen, setProductDialogOpen] = useState(false)
   const [pendingProductIndex, setPendingProductIndex] = useState<number | null>(null)
@@ -77,13 +76,8 @@ export function PurchaseForm({
     name: "items",
   })
 
-  const recalculateTotal = useCallback(() => {
-    const items = form.getValues("items")
-    const sum = items.reduce((acc, item) => {
-      return acc + (item.quantity || 0) * (item.unitPrice || 0)
-    }, 0)
-    setTotal(sum)
-  }, [form])
+  const watchedItems = useWatch({ control: form.control, name: "items" })
+  const total = watchedItems.reduce((acc, item) => acc + (item.quantity || 0) * (item.unitPrice || 0), 0)
 
   const isLoading = form.formState.isSubmitting
 
@@ -143,7 +137,10 @@ export function PurchaseForm({
                         ? field.value.toISOString().slice(0, 10)
                         : ""
                     }
-                    onChange={(e) => field.onChange(new Date(e.target.value))}
+                    onChange={(e) => {
+                      const [y, m, d] = e.target.value.split("-").map(Number)
+                      field.onChange(new Date(y, m - 1, d))
+                    }}
                   />
                 </FormControl>
                 <FormMessage />
@@ -224,35 +221,23 @@ export function PurchaseForm({
                     render={({ field: f }) => (
                       <FormItem>
                         <FormLabel className="text-xs">Produto *</FormLabel>
-                        <Select
-                          onValueChange={(val) => {
-                            if (val === "__create__") {
+                        <FormControl>
+                          <ComboboxWithCreate
+                            options={productList.map((p) => ({
+                              value: p.id,
+                              label: `${p.name} (${p.unit})`,
+                            }))}
+                            value={f.value}
+                            onChange={f.onChange}
+                            placeholder="Selecionar produto..."
+                            searchPlaceholder="Buscar produto..."
+                            createLabel="Novo produto"
+                            onCreateClick={() => {
                               setPendingProductIndex(index)
                               setProductDialogOpen(true)
-                            } else {
-                              f.onChange(val)
-                            }
-                          }}
-                          value={f.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {productList.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name} ({product.unit})
-                              </SelectItem>
-                            ))}
-                            <SelectSeparator />
-                            <SelectItem value="__create__" className="text-primary font-medium">
-                              <Plus className="size-3 mr-1 inline-block" />
-                              Novo produto
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -273,10 +258,7 @@ export function PurchaseForm({
                             min="0"
                             placeholder="0"
                             {...f}
-                            onChange={(e) => {
-                              f.onChange(parseFloat(e.target.value) || 0)
-                              recalculateTotal()
-                            }}
+                            onChange={(e) => f.onChange(parseFloat(e.target.value) || 0)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -299,10 +281,7 @@ export function PurchaseForm({
                             min="0"
                             placeholder="0,00"
                             {...f}
-                            onChange={(e) => {
-                              f.onChange(parseFloat(e.target.value) || 0)
-                              recalculateTotal()
-                            }}
+                            onChange={(e) => f.onChange(parseFloat(e.target.value) || 0)}
                           />
                         </FormControl>
                         <FormMessage />
@@ -313,8 +292,8 @@ export function PurchaseForm({
 
                 <div className="col-span-1 text-right text-sm font-medium pb-2">
                   {formatCurrency(
-                    (form.watch(`items.${index}.quantity`) || 0) *
-                      (form.watch(`items.${index}.unitPrice`) || 0)
+                    (watchedItems[index]?.quantity || 0) *
+                      (watchedItems[index]?.unitPrice || 0)
                   )}
                 </div>
 
@@ -324,10 +303,7 @@ export function PurchaseForm({
                     variant="ghost"
                     size="icon"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => {
-                      remove(index)
-                      recalculateTotal()
-                    }}
+                    onClick={() => remove(index)}
                     disabled={fields.length === 1}
                   >
                     <Trash2 className="size-4" />

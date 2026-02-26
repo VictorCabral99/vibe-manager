@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createProductSchema,
@@ -13,6 +16,9 @@ import {
 export async function createProductAction(
   data: CreateProductInput
 ): Promise<ActionResult<{ id: string }>> {
+  const guard = await requirePermission(PERMISSIONS.catalog.create)
+  if (!guard.user) return guard.error
+
   const parsed = createProductSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -30,6 +36,7 @@ export async function createProductAction(
         isActive: parsed.data.isActive,
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Product", entityId: product.id }).catch(console.error)
     revalidatePath("/catalogo/produtos")
     return { success: true, data: { id: product.id } }
   } catch {
@@ -40,6 +47,9 @@ export async function createProductAction(
 export async function updateProductAction(
   data: UpdateProductInput
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.edit)
+  if (!guard.user) return guard.error
+
   const parsed = updateProductSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -64,6 +74,7 @@ export async function updateProductAction(
         ...(fields.isActive !== undefined && { isActive: fields.isActive }),
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Product", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/produtos")
     return { success: true }
   } catch {
@@ -74,6 +85,9 @@ export async function updateProductAction(
 export async function toggleProductActiveAction(
   id: string
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.edit)
+  if (!guard.user) return guard.error
+
   try {
     const product = await prisma.product.findFirst({
       where: { id, deletedAt: null },
@@ -89,6 +103,7 @@ export async function toggleProductActiveAction(
       data: { isActive: !product.isActive },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "TOGGLE_ACTIVE", entity: "Product", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/produtos")
     return { success: true }
   } catch {
@@ -97,11 +112,15 @@ export async function toggleProductActiveAction(
 }
 
 export async function deleteProductAction(id: string): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.delete)
+  if (!guard.user) return guard.error
+
   try {
     await prisma.product.update({
       where: { id },
       data: { deletedAt: new Date() },
     })
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Product", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/produtos")
     return { success: true }
   } catch {

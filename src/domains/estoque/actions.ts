@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import { StockEntryType } from "@prisma/client"
 import {
@@ -23,8 +25,8 @@ import {
 export async function createStockEntryAction(
   data: CreateStockEntryInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.stock.manage)
+  if (!guard.user) return guard.error
 
   const parsed = createStockEntrySchema.safeParse(data)
   if (!parsed.success) {
@@ -40,10 +42,11 @@ export async function createStockEntryAction(
         quantity,
         type: StockEntryType.MANUAL,
         notes: notes ?? null,
-        registeredById: session.user.id,
+        registeredById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "StockEntry", entityId: entry.id }).catch(console.error)
     revalidatePath("/estoque")
     return { success: true, data: { id: entry.id } }
   } catch {
@@ -58,8 +61,8 @@ export async function createStockEntryAction(
 export async function createStockExitAction(
   data: CreateStockExitInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.stock.withdraw)
+  if (!guard.user) return guard.error
 
   const parsed = createStockExitSchema.safeParse(data)
   if (!parsed.success) {
@@ -75,10 +78,11 @@ export async function createStockExitAction(
         quantity,
         projectId: projectId || null,
         notes: notes ?? null,
-        registeredById: session.user.id,
+        registeredById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "StockExit", entityId: exit.id }).catch(console.error)
     revalidatePath("/estoque")
     if (projectId) revalidatePath(`/projetos/${projectId}`)
     return { success: true, data: { id: exit.id } }
@@ -94,8 +98,8 @@ export async function createStockExitAction(
 export async function createToolLoanAction(
   data: CreateToolLoanInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.stock.manage)
+  if (!guard.user) return guard.error
 
   const parsed = createToolLoanSchema.safeParse(data)
   if (!parsed.success) {
@@ -112,10 +116,11 @@ export async function createToolLoanAction(
         employeeId,
         projectId: projectId || null,
         notes: notes ?? null,
-        registeredById: session.user.id,
+        registeredById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "ToolLoan", entityId: loan.id }).catch(console.error)
     revalidatePath("/estoque")
     return { success: true, data: { id: loan.id } }
   } catch {
@@ -130,8 +135,8 @@ export async function createToolLoanAction(
 export async function returnToolAction(
   data: ReturnToolInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.stock.manage)
+  if (!guard.user) return guard.error
 
   const parsed = returnToolSchema.safeParse(data)
   if (!parsed.success) {
@@ -159,10 +164,11 @@ export async function returnToolAction(
         quantity: loan.quantity,
         type: StockEntryType.RETURN,
         notes: `Devolução de empréstimo #${toolLoanId.slice(-8)}`,
-        registeredById: session.user.id,
+        registeredById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "RETURN", entity: "ToolLoan", entityId: toolLoanId }).catch(console.error)
     revalidatePath("/estoque")
     return { success: true }
   } catch {

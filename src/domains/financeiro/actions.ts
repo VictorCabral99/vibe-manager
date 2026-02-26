@@ -1,8 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createExternalPayableSchema,
@@ -20,10 +22,8 @@ import {
 export async function createExternalPayableAction(
   data: CreateExternalPayableInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.financial.manage)
+  if (!guard.user) return guard.error
 
   const parsed = createExternalPayableSchema.safeParse(data)
   if (!parsed.success) {
@@ -39,10 +39,11 @@ export async function createExternalPayableAction(
         amount: parsed.data.amount,
         dueDate: parsed.data.dueDate,
         status: "PENDING",
-        createdById: session.user.id,
+        createdById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "CashFlowEntry", entityId: entry.id }).catch(console.error)
     revalidatePath("/financeiro")
     return { success: true, data: { id: entry.id } }
   } catch {
@@ -57,10 +58,8 @@ export async function createExternalPayableAction(
 export async function markAsPaidAction(
   data: MarkAsPaidInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.financial.manage)
+  if (!guard.user) return guard.error
 
   const parsed = markAsPaidSchema.safeParse(data)
   if (!parsed.success) {
@@ -76,6 +75,7 @@ export async function markAsPaidAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "MARK_PAID", entity: "CashFlowEntry", entityId: parsed.data.id }).catch(console.error)
     revalidatePath("/financeiro")
     return { success: true }
   } catch {
@@ -90,10 +90,8 @@ export async function markAsPaidAction(
 export async function updateDueDateAction(
   data: UpdateDueDateInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.financial.manage)
+  if (!guard.user) return guard.error
 
   const parsed = updateDueDateSchema.safeParse(data)
   if (!parsed.success) {
@@ -106,6 +104,7 @@ export async function updateDueDateAction(
       data: { dueDate: parsed.data.dueDate },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE_DUE_DATE", entity: "CashFlowEntry", entityId: parsed.data.id }).catch(console.error)
     revalidatePath("/financeiro")
     return { success: true }
   } catch {

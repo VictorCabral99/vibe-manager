@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import { createPurchaseSchema, type CreatePurchaseInput } from "./schemas"
 import {
@@ -19,8 +21,9 @@ import {
 export async function createPurchaseAction(
   data: CreatePurchaseInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.purchases.create)
+  if (!guard.user) return guard.error
+  const { user: session } = guard
 
   const parsed = createPurchaseSchema.safeParse(data)
   if (!parsed.success) {
@@ -64,7 +67,7 @@ export async function createPurchaseAction(
             quantity: item.quantity,
             type: StockEntryType.PURCHASE,
             purchaseItemId: item.id,
-            registeredById: session.user.id,
+            registeredById: session.id,
           },
         })
       }
@@ -78,7 +81,7 @@ export async function createPurchaseAction(
             description: `Compra de materiais${supplier ? ` - ${supplier}` : ""}`,
             amount: totalAmount,
             date,
-            registeredById: session.user.id,
+            registeredById: session.id,
             purchaseId: newPurchase.id,
           },
         })
@@ -93,13 +96,14 @@ export async function createPurchaseAction(
           amount: totalAmount,
           dueDate: date,
           purchaseId: newPurchase.id,
-          createdById: session.user.id,
+          createdById: session.id,
         },
       })
 
       return newPurchase
     })
 
+    void createAuditLog({ userId: session.id, action: "CREATE", entity: "Purchase", entityId: purchase.id }).catch(console.error)
     revalidatePath("/compras")
     if (projectId) {
       revalidatePath(`/projetos/${projectId}`)
@@ -115,8 +119,8 @@ export async function createPurchaseAction(
 // ─────────────────────────────────────────────
 
 export async function deletePurchaseAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.purchases.delete)
+  if (!guard.user) return guard.error
 
   try {
     // Verificar se há dependências que impeçam a exclusão
@@ -152,6 +156,7 @@ export async function deletePurchaseAction(id: string): Promise<ActionResult> {
       await tx.purchase.delete({ where: { id } })
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Purchase", entityId: id }).catch(console.error)
     revalidatePath("/compras")
     return { success: true }
   } catch {

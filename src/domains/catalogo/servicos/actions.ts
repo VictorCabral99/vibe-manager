@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createServiceSchema,
@@ -13,6 +16,9 @@ import {
 export async function createServiceAction(
   data: CreateServiceInput
 ): Promise<ActionResult<{ id: string }>> {
+  const guard = await requirePermission(PERMISSIONS.catalog.create)
+  if (!guard.user) return guard.error
+
   const parsed = createServiceSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -27,6 +33,7 @@ export async function createServiceAction(
         isActive: parsed.data.isActive,
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Service", entityId: service.id }).catch(console.error)
     revalidatePath("/catalogo/servicos")
     return { success: true, data: { id: service.id } }
   } catch {
@@ -37,6 +44,9 @@ export async function createServiceAction(
 export async function updateServiceAction(
   data: UpdateServiceInput
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.edit)
+  if (!guard.user) return guard.error
+
   const parsed = updateServiceSchema.safeParse(data)
   if (!parsed.success) {
     return { success: false, error: "Dados inválidos" }
@@ -56,6 +66,7 @@ export async function updateServiceAction(
         ...(fields.isActive !== undefined && { isActive: fields.isActive }),
       },
     })
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Service", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/servicos")
     return { success: true }
   } catch {
@@ -66,6 +77,9 @@ export async function updateServiceAction(
 export async function toggleServiceActiveAction(
   id: string
 ): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.edit)
+  if (!guard.user) return guard.error
+
   try {
     const service = await prisma.service.findFirst({
       where: { id, deletedAt: null },
@@ -81,6 +95,7 @@ export async function toggleServiceActiveAction(
       data: { isActive: !service.isActive },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "TOGGLE_ACTIVE", entity: "Service", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/servicos")
     return { success: true }
   } catch {
@@ -89,11 +104,15 @@ export async function toggleServiceActiveAction(
 }
 
 export async function deleteServiceAction(id: string): Promise<ActionResult> {
+  const guard = await requirePermission(PERMISSIONS.catalog.delete)
+  if (!guard.user) return guard.error
+
   try {
     await prisma.service.update({
       where: { id },
       data: { deletedAt: new Date() },
     })
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Service", entityId: id }).catch(console.error)
     revalidatePath("/catalogo/servicos")
     return { success: true }
   } catch {

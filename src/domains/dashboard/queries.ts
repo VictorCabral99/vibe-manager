@@ -11,42 +11,27 @@ export async function getDashboardData() {
   const startOfYear = new Date(now.getFullYear(), 0, 1)
 
   const [
-    monthlyIn,
-    monthlyOut,
-    yearlyIn,
-    yearlyOut,
-    pendingReceivable,
-    pendingPayable,
+    cashEntries,
     quoteStats,
     recentQuotes,
     activeProjectsCount,
     recentProjects,
     lowStockProducts,
     openAlerts,
+    entriesByProduct,
+    exitsByProduct,
+    activeLoans,
   ] = await Promise.all([
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.IN, paidAt: { gte: startOfMonth } },
-      _sum: { amount: true },
-    }),
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.OUT, paidAt: { gte: startOfMonth } },
-      _sum: { amount: true },
-    }),
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.IN, paidAt: { gte: startOfYear } },
-      _sum: { amount: true },
-    }),
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.OUT, paidAt: { gte: startOfYear } },
-      _sum: { amount: true },
-    }),
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.IN, paidAt: null },
-      _sum: { amount: true },
-    }),
-    prisma.cashFlowEntry.aggregate({
-      where: { direction: CashFlowDirection.OUT, paidAt: null },
-      _sum: { amount: true },
+    // findMany + reduce: evita aggregate() e $queryRaw() que falham com PrismaPg adapter no Prisma 7
+    // Filtra apenas entradas do ano corrente (pagas) + pendentes (sem paidAt), reduzindo volume de dados
+    prisma.cashFlowEntry.findMany({
+      where: {
+        OR: [
+          { paidAt: { gte: startOfYear } },
+          { paidAt: null },
+        ],
+      },
+      select: { direction: true, amount: true, paidAt: true },
     }),
     prisma.quote.groupBy({
       by: ["status"],
@@ -89,26 +74,39 @@ export async function getDashboardData() {
       take: 10,
       select: { id: true, title: true, priority: true, status: true, createdAt: true },
     }),
+    prisma.stockEntry.groupBy({
+      by: ["productId"],
+      _sum: { quantity: true },
+    }),
+    prisma.stockExit.groupBy({
+      by: ["productId"],
+      _sum: { quantity: true },
+    }),
+    prisma.toolLoan.groupBy({
+      by: ["productId"],
+      where: { returnedAt: null },
+      _sum: { quantity: true },
+    }),
   ])
 
-  // Calcular saldo de estoque para alertas
-  const entriesByProduct = await prisma.stockEntry.groupBy({
-    by: ["productId"],
-    _sum: { quantity: true },
-  })
-  const exitsByProduct = await prisma.stockExit.groupBy({
-    by: ["productId"],
-    _sum: { quantity: true },
-  })
-  const activeLoans = await prisma.toolLoan.groupBy({
-    by: ["productId"],
-    where: { returnedAt: null },
-    _sum: { quantity: true },
-  })
+  // ── Agregações financeiras em JS (compatível com qualquer adapter) ─────────────
+  const sum = (entries: typeof cashEntries) =>
+    entries.reduce((acc, e) => acc + Number(e.amount), 0)
 
+  const paid  = cashEntries.filter((e) => e.paidAt !== null)
+  const unpaid = cashEntries.filter((e) => e.paidAt === null)
+
+  const monthlyIn  = sum(paid.filter((e) => e.direction === CashFlowDirection.IN  && e.paidAt! >= startOfMonth))
+  const monthlyOut = sum(paid.filter((e) => e.direction === CashFlowDirection.OUT && e.paidAt! >= startOfMonth))
+  const yearlyIn   = sum(paid.filter((e) => e.direction === CashFlowDirection.IN  && e.paidAt! >= startOfYear))
+  const yearlyOut  = sum(paid.filter((e) => e.direction === CashFlowDirection.OUT && e.paidAt! >= startOfYear))
+  const pendingReceivable = sum(unpaid.filter((e) => e.direction === CashFlowDirection.IN))
+  const pendingPayable    = sum(unpaid.filter((e) => e.direction === CashFlowDirection.OUT))
+
+  // ── Saldo de estoque para alertas ────────────────────────────────────────────
   const entriesMap = new Map(entriesByProduct.map((e) => [e.productId, Number(e._sum.quantity ?? 0)]))
-  const exitsMap = new Map(exitsByProduct.map((e) => [e.productId, Number(e._sum.quantity ?? 0)]))
-  const loansMap = new Map(activeLoans.map((l) => [l.productId, Number(l._sum.quantity ?? 0)]))
+  const exitsMap   = new Map(exitsByProduct.map((e) => [e.productId, Number(e._sum.quantity ?? 0)]))
+  const loansMap   = new Map(activeLoans.map((l) => [l.productId, Number(l._sum.quantity ?? 0)]))
 
   const lowStockAlerts = lowStockProducts
     .map((p) => {
@@ -121,13 +119,13 @@ export async function getDashboardData() {
 
   return {
     financial: {
-      monthlyIn: Number(monthlyIn._sum.amount ?? 0),
-      monthlyOut: Number(monthlyOut._sum.amount ?? 0),
-      monthlyBalance: Number(monthlyIn._sum.amount ?? 0) - Number(monthlyOut._sum.amount ?? 0),
-      yearlyIn: Number(yearlyIn._sum.amount ?? 0),
-      yearlyOut: Number(yearlyOut._sum.amount ?? 0),
-      pendingReceivable: Number(pendingReceivable._sum.amount ?? 0),
-      pendingPayable: Number(pendingPayable._sum.amount ?? 0),
+      monthlyIn,
+      monthlyOut,
+      monthlyBalance:    monthlyIn - monthlyOut,
+      yearlyIn,
+      yearlyOut,
+      pendingReceivable,
+      pendingPayable,
     },
     quotes: {
       stats: quoteStatusMap as Partial<Record<QuoteStatus, number>>,

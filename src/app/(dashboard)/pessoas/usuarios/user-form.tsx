@@ -24,9 +24,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { createUserSchema, updateUserSchema, type CreateUserInput, type UpdateUserInput } from "@/domains/pessoas/usuarios/schemas"
+import { createUserSchema, updateUserSchema, type UpdateUserInput } from "@/domains/pessoas/usuarios/schemas"
 import { createUserAction, updateUserAction } from "@/domains/pessoas/usuarios/actions"
 import type { UserListItem } from "@/domains/pessoas/usuarios/queries"
+
+// Campos editáveis do formulário (comuns a create e update, sem `id`)
+interface UserFormValues {
+  name: string
+  email: string
+  password: string
+  role: Role
+  isActive: boolean
+}
 
 interface UserFormProps {
   user?: UserListItem
@@ -45,8 +54,8 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   const [isPending, startTransition] = useTransition()
   const isEditing = !!user
 
-  const createForm = useForm<CreateUserInput>({
-    resolver: zodResolver(createUserSchema) as Resolver<CreateUserInput>,
+  const createForm = useForm<UserFormValues>({
+    resolver: zodResolver(createUserSchema) as Resolver<UserFormValues>,
     defaultValues: {
       name: "",
       email: "",
@@ -56,8 +65,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
     },
   })
 
-  const updateForm = useForm<CreateUserInput>({
-    resolver: zodResolver(updateUserSchema) as unknown as Resolver<CreateUserInput>,
+  const updateForm = useForm<UserFormValues>({
+    // updateUserSchema tem `id` obrigatório e demais campos opcionais, incompatível
+    // estruturalmente com UserFormValues. O cast é necessário para o padrão create+update.
+    resolver: zodResolver(updateUserSchema) as unknown as Resolver<UserFormValues>,
     defaultValues: {
       name: user?.name ?? "",
       email: user?.email ?? "",
@@ -69,7 +80,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
 
   const form = isEditing ? updateForm : createForm
 
-  function onSubmit(data: CreateUserInput) {
+  function onSubmit(data: UserFormValues) {
     startTransition(async () => {
       if (isEditing) {
         const result = await updateUserAction({

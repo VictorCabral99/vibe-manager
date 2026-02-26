@@ -27,7 +27,6 @@ import {
 import {
   createEmployeeSchema,
   updateEmployeeSchema,
-  type CreateEmployeeInput,
   type UpdateEmployeeInput,
 } from "@/domains/pessoas/funcionarios/schemas"
 import {
@@ -35,6 +34,18 @@ import {
   updateEmployeeAction,
 } from "@/domains/pessoas/funcionarios/actions"
 import type { EmployeeListItem, UserWithoutEmployee } from "@/domains/pessoas/funcionarios/queries"
+
+// Campos editáveis do formulário (comuns a create e update, sem `id`)
+interface EmployeeFormValues {
+  userId: string
+  name: string
+  cpf: string
+  phone: string
+  jobTitle: string
+  canPurchase: boolean
+  canWithdrawStock: boolean
+  notes: string
+}
 
 interface EmployeeFormProps {
   employee?: EmployeeListItem
@@ -47,8 +58,8 @@ export function EmployeeForm({ employee, availableUsers = [], onSuccess }: Emplo
   const [isPending, startTransition] = useTransition()
   const isEditing = !!employee
 
-  const createForm = useForm<CreateEmployeeInput>({
-    resolver: zodResolver(createEmployeeSchema) as Resolver<CreateEmployeeInput>,
+  const createForm = useForm<EmployeeFormValues>({
+    resolver: zodResolver(createEmployeeSchema) as Resolver<EmployeeFormValues>,
     defaultValues: {
       userId: "",
       name: "",
@@ -61,9 +72,12 @@ export function EmployeeForm({ employee, availableUsers = [], onSuccess }: Emplo
     },
   })
 
-  const updateForm = useForm<CreateEmployeeInput>({
-    resolver: zodResolver(updateEmployeeSchema) as unknown as Resolver<CreateEmployeeInput>,
+  const updateForm = useForm<EmployeeFormValues>({
+    // updateEmployeeSchema tem `id` obrigatório e demais campos opcionais, incompatível
+    // estruturalmente com EmployeeFormValues. O cast é necessário para o padrão create+update.
+    resolver: zodResolver(updateEmployeeSchema) as unknown as Resolver<EmployeeFormValues>,
     defaultValues: {
+      userId: employee?.userId ?? "",
       name: employee?.name ?? "",
       cpf: employee?.cpf ?? "",
       phone: employee?.phone ?? "",
@@ -76,7 +90,7 @@ export function EmployeeForm({ employee, availableUsers = [], onSuccess }: Emplo
 
   const form = isEditing ? updateForm : createForm
 
-  function onSubmit(data: CreateEmployeeInput) {
+  function onSubmit(data: EmployeeFormValues) {
     startTransition(async () => {
       if (isEditing) {
         const result = await updateEmployeeAction({

@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createUserSchema,
@@ -21,10 +23,8 @@ import {
 export async function createUserAction(
   data: CreateUserInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.users.create)
+  if (!guard.user) return guard.error
 
   const parsed = createUserSchema.safeParse(data)
   if (!parsed.success) {
@@ -53,6 +53,7 @@ export async function createUserAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "User", entityId: user.id }).catch(console.error)
     revalidatePath("/pessoas/usuarios")
     return { success: true, data: { id: user.id } }
   } catch {
@@ -61,10 +62,8 @@ export async function createUserAction(
 }
 
 export async function updateUserAction(data: UpdateUserInput): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.users.edit)
+  if (!guard.user) return guard.error
 
   const parsed = updateUserSchema.safeParse(data)
   if (!parsed.success) {
@@ -100,6 +99,7 @@ export async function updateUserAction(data: UpdateUserInput): Promise<ActionRes
       data: updateData,
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "User", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/usuarios")
     return { success: true }
   } catch {
@@ -108,10 +108,8 @@ export async function updateUserAction(data: UpdateUserInput): Promise<ActionRes
 }
 
 export async function toggleUserActiveAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.users.edit)
+  if (!guard.user) return guard.error
 
   try {
     const user = await prisma.user.findFirst({
@@ -127,6 +125,7 @@ export async function toggleUserActiveAction(id: string): Promise<ActionResult> 
       data: { isActive: !user.isActive },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "TOGGLE_ACTIVE", entity: "User", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/usuarios")
     return { success: true }
   } catch {
@@ -135,10 +134,8 @@ export async function toggleUserActiveAction(id: string): Promise<ActionResult> 
 }
 
 export async function changePasswordAction(data: ChangePasswordInput): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.users.edit)
+  if (!guard.user) return guard.error
 
   const parsed = changePasswordSchema.safeParse(data)
   if (!parsed.success) {
@@ -162,6 +159,7 @@ export async function changePasswordAction(data: ChangePasswordInput): Promise<A
       data: { password: hashedPassword },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CHANGE_PASSWORD", entity: "User", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/usuarios")
     return { success: true }
   } catch {
@@ -170,10 +168,8 @@ export async function changePasswordAction(data: ChangePasswordInput): Promise<A
 }
 
 export async function deleteUserAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.users.delete)
+  if (!guard.user) return guard.error
 
   try {
     const user = await prisma.user.findFirst({
@@ -188,6 +184,7 @@ export async function deleteUserAction(id: string): Promise<ActionResult> {
       data: { deletedAt: new Date() },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "User", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/usuarios")
     return { success: true }
   } catch {

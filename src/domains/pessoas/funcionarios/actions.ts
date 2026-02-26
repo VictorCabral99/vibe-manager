@@ -1,8 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createEmployeeSchema,
@@ -18,10 +20,8 @@ import {
 export async function createEmployeeAction(
   data: CreateEmployeeInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.employees.create)
+  if (!guard.user) return guard.error
 
   const parsed = createEmployeeSchema.safeParse(data)
   if (!parsed.success) {
@@ -68,6 +68,7 @@ export async function createEmployeeAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Employee", entityId: employee.id }).catch(console.error)
     revalidatePath("/pessoas/funcionarios")
     return { success: true, data: { id: employee.id } }
   } catch {
@@ -76,10 +77,8 @@ export async function createEmployeeAction(
 }
 
 export async function updateEmployeeAction(data: UpdateEmployeeInput): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.employees.edit)
+  if (!guard.user) return guard.error
 
   const parsed = updateEmployeeSchema.safeParse(data)
   if (!parsed.success) {
@@ -115,6 +114,7 @@ export async function updateEmployeeAction(data: UpdateEmployeeInput): Promise<A
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Employee", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/funcionarios")
     return { success: true }
   } catch {
@@ -123,10 +123,8 @@ export async function updateEmployeeAction(data: UpdateEmployeeInput): Promise<A
 }
 
 export async function toggleEmployeeActiveAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.employees.edit)
+  if (!guard.user) return guard.error
 
   try {
     const employee = await prisma.employee.findFirst({
@@ -142,6 +140,7 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
       data: { isActive: !employee.isActive },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "TOGGLE_ACTIVE", entity: "Employee", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/funcionarios")
     return { success: true }
   } catch {
@@ -150,10 +149,8 @@ export async function toggleEmployeeActiveAction(id: string): Promise<ActionResu
 }
 
 export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) {
-    return { success: false, error: "Não autorizado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.employees.delete)
+  if (!guard.user) return guard.error
 
   try {
     const employee = await prisma.employee.findFirst({
@@ -168,6 +165,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult> {
       data: { deletedAt: new Date() },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Employee", entityId: id }).catch(console.error)
     revalidatePath("/pessoas/funcionarios")
     return { success: true }
   } catch {

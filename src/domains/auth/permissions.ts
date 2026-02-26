@@ -82,4 +82,10 @@ export const PERMISSIONS = {
   dashboard: {
     view: (role: Role) => hasRole(role, "MANAGER"),
   },
+  // Operação (alertas, display)
+  operacao: {
+    view: (role: Role) => hasRole(role, "EMPLOYEE"),
+    create: (role: Role) => hasRole(role, "EMPLOYEE"),
+    manage: (role: Role) => hasRole(role, "MANAGER"),
+  },
 } as const

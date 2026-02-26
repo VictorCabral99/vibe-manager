@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/auth"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createProjectSchema,
@@ -25,8 +27,8 @@ import { ProjectStatus, ExpenseType, CashFlowType, CashFlowDirection } from "@pr
 export async function createProjectAction(
   data: CreateProjectInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.create)
+  if (!guard.user) return guard.error
 
   const parsed = createProjectSchema.safeParse(data)
   if (!parsed.success) {
@@ -41,10 +43,11 @@ export async function createProjectAction(
         totalRevenue: parsed.data.totalRevenue,
         targetMargin: parsed.data.targetMargin,
         notes: parsed.data.notes ?? null,
-        createdById: session.user.id,
+        createdById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Project", entityId: project.id }).catch(console.error)
     revalidatePath("/projetos")
     return { success: true, data: { id: project.id } }
   } catch {
@@ -55,8 +58,8 @@ export async function createProjectAction(
 export async function updateProjectAction(
   data: UpdateProjectInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.edit)
+  if (!guard.user) return guard.error
 
   const parsed = updateProjectSchema.safeParse(data)
   if (!parsed.success) {
@@ -87,6 +90,7 @@ export async function updateProjectAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Project", entityId: id }).catch(console.error)
     revalidatePath("/projetos")
     revalidatePath(`/projetos/${id}`)
     return { success: true }
@@ -96,8 +100,8 @@ export async function updateProjectAction(
 }
 
 export async function closeProjectAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.close)
+  if (!guard.user) return guard.error
 
   try {
     const project = await prisma.project.findFirst({
@@ -118,6 +122,7 @@ export async function closeProjectAction(id: string): Promise<ActionResult> {
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CLOSE", entity: "Project", entityId: id }).catch(console.error)
     revalidatePath("/projetos")
     revalidatePath(`/projetos/${id}`)
     return { success: true }
@@ -133,8 +138,8 @@ export async function closeProjectAction(id: string): Promise<ActionResult> {
 export async function createExpenseAction(
   data: CreateExpenseInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.edit)
+  if (!guard.user) return guard.error
 
   const parsed = createExpenseSchema.safeParse(data)
   if (!parsed.success) {
@@ -149,10 +154,11 @@ export async function createExpenseAction(
         description: parsed.data.description,
         amount: parsed.data.amount,
         date: parsed.data.date,
-        registeredById: session.user.id,
+        registeredById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "ProjectExpense", entityId: expense.id }).catch(console.error)
     revalidatePath("/projetos")
     revalidatePath(`/projetos/${parsed.data.projectId}`)
     return { success: true, data: { id: expense.id } }
@@ -168,8 +174,8 @@ export async function createExpenseAction(
 export async function createLaborProfessionalAction(
   data: CreateLaborProfessionalInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.edit)
+  if (!guard.user) return guard.error
 
   const parsed = createLaborProfessionalSchema.safeParse(data)
   if (!parsed.success) {
@@ -185,6 +191,7 @@ export async function createLaborProfessionalAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "LaborProfessional", entityId: professional.id }).catch(console.error)
     revalidatePath("/projetos")
     return { success: true, data: { id: professional.id } }
   } catch {
@@ -199,8 +206,8 @@ export async function createLaborProfessionalAction(
 export async function createLaborEntryAction(
   data: CreateLaborEntryInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.projects.edit)
+  if (!guard.user) return guard.error
 
   const parsed = createLaborEntrySchema.safeParse(data)
   if (!parsed.success) {
@@ -229,7 +236,7 @@ export async function createLaborEntryAction(
           quantity,
           total,
           description: parsed.data.description ?? null,
-          registeredById: session.user.id,
+          registeredById: guard.user.id,
         },
       })
 
@@ -240,7 +247,7 @@ export async function createLaborEntryAction(
           description: `Diária - ${professional.name}${parsed.data.description ? ` - ${parsed.data.description}` : ""}`,
           amount: total,
           date: parsed.data.date,
-          registeredById: session.user.id,
+          registeredById: guard.user.id,
         },
       })
 
@@ -252,13 +259,14 @@ export async function createLaborEntryAction(
           amount: total,
           dueDate: parsed.data.date,
           laborEntryId: laborEntry.id,
-          createdById: session.user.id,
+          createdById: guard.user.id,
         },
       })
 
       return laborEntry
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "LaborEntry", entityId: entry.id }).catch(console.error)
     revalidatePath("/projetos")
     revalidatePath(`/projetos/${parsed.data.projectId}`)
     return { success: true, data: { id: entry.id } }

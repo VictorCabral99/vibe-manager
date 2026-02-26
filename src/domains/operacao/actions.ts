@@ -1,8 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import type { ActionResult } from "@/types"
 import {
   createAlertSchema,
@@ -20,10 +22,8 @@ import {
 export async function createAlertAction(
   data: CreateAlertInput
 ): Promise<ActionResult<{ id: string }>> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.operacao.create)
+  if (!guard.user) return guard.error
 
   const parsed = createAlertSchema.safeParse(data)
   if (!parsed.success) {
@@ -39,10 +39,11 @@ export async function createAlertAction(
         projectId: parsed.data.projectId || null,
         productId: parsed.data.productId || null,
         assignedToId: parsed.data.assignedToId || null,
-        createdById: session.user.id,
+        createdById: guard.user.id,
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "CREATE", entity: "Alert", entityId: alert.id }).catch(console.error)
     revalidatePath("/operacao")
     return { success: true, data: { id: alert.id } }
   } catch {
@@ -57,10 +58,8 @@ export async function createAlertAction(
 export async function updateAlertAction(
   data: UpdateAlertInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.operacao.manage)
+  if (!guard.user) return guard.error
 
   const parsed = updateAlertSchema.safeParse(data)
   if (!parsed.success) {
@@ -90,6 +89,7 @@ export async function updateAlertAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Alert", entityId: id }).catch(console.error)
     revalidatePath("/operacao")
     return { success: true }
   } catch {
@@ -104,10 +104,8 @@ export async function updateAlertAction(
 export async function resolveAlertAction(
   data: ResolveAlertInput
 ): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.operacao.manage)
+  if (!guard.user) return guard.error
 
   const parsed = resolveAlertSchema.safeParse(data)
   if (!parsed.success) {
@@ -123,6 +121,7 @@ export async function resolveAlertAction(
       },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "RESOLVE", entity: "Alert", entityId: parsed.data.id }).catch(console.error)
     revalidatePath("/operacao")
     return { success: true }
   } catch {
@@ -135,16 +134,15 @@ export async function resolveAlertAction(
 // ─────────────────────────────────────────────
 
 export async function deleteAlertAction(id: string): Promise<ActionResult> {
-  const session = await auth()
-  if (!session?.user?.id) {
-    return { success: false, error: "Não autenticado" }
-  }
+  const guard = await requirePermission(PERMISSIONS.operacao.manage)
+  if (!guard.user) return guard.error
 
   try {
     await prisma.alert.delete({
       where: { id },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Alert", entityId: id }).catch(console.error)
     revalidatePath("/operacao")
     return { success: true }
   } catch {

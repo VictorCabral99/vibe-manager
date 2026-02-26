@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache"
 import { QuoteStatus, CashFlowType, CashFlowDirection } from "@prisma/client"
-import { auth } from "@/auth"
+import { requirePermission } from "@/lib/auth-action"
+import { PERMISSIONS } from "@/domains/auth/permissions"
+import { createAuditLog } from "@/lib/audit"
 import { prisma } from "@/lib/prisma"
 import type { ActionResult } from "@/types"
 import { calculateQuoteTotals } from "./calculations"
@@ -18,23 +20,15 @@ import {
 const QUOTES_PATH = "/comercial/orcamentos"
 
 // ─────────────────────────────────────────────
-// Helpers internos
-// ─────────────────────────────────────────────
-
-async function getAuthenticatedUserId(): Promise<string | null> {
-  const session = await auth()
-  return session?.user?.id ?? null
-}
-
-// ─────────────────────────────────────────────
 // Actions
 // ─────────────────────────────────────────────
 
 export async function createQuoteAction(
   data: CreateQuoteInput,
 ): Promise<ActionResult<{ id: string }>> {
-  const userId = await getAuthenticatedUserId()
-  if (!userId) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.quotes.create)
+  if (!guard.user) return guard.error
+  const userId = guard.user.id
 
   const parsed = createQuoteSchema.safeParse(data)
   if (!parsed.success) {
@@ -98,6 +92,7 @@ export async function createQuoteAction(
       return created
     })
 
+    void createAuditLog({ userId, action: "CREATE", entity: "Quote", entityId: quote.id }).catch(console.error)
     revalidatePath(QUOTES_PATH)
     return { success: true, data: { id: quote.id } }
   } catch (error) {
@@ -109,8 +104,8 @@ export async function createQuoteAction(
 export async function updateQuoteAction(
   data: UpdateQuoteInput,
 ): Promise<ActionResult<{ id: string }>> {
-  const userId = await getAuthenticatedUserId()
-  if (!userId) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.quotes.edit)
+  if (!guard.user) return guard.error
 
   const parsed = updateQuoteSchema.safeParse(data)
   if (!parsed.success) {
@@ -171,6 +166,7 @@ export async function updateQuoteAction(
       })
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "UPDATE", entity: "Quote", entityId: id }).catch(console.error)
     revalidatePath(QUOTES_PATH)
     revalidatePath(`${QUOTES_PATH}/${id}`)
     return { success: true, data: { id } }
@@ -183,8 +179,9 @@ export async function updateQuoteAction(
 export async function changeQuoteStatusAction(
   data: ChangeQuoteStatusInput,
 ): Promise<ActionResult> {
-  const userId = await getAuthenticatedUserId()
-  if (!userId) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.quotes.edit)
+  if (!guard.user) return guard.error
+  const userId = guard.user.id
 
   const parsed = changeQuoteStatusSchema.safeParse(data)
   if (!parsed.success) {
@@ -254,6 +251,7 @@ export async function changeQuoteStatusAction(
       }
     })
 
+    void createAuditLog({ userId, action: "STATUS_CHANGE", entity: "Quote", entityId: quoteId, newData: { status: newStatus } }).catch(console.error)
     revalidatePath(QUOTES_PATH)
     revalidatePath(`${QUOTES_PATH}/${quoteId}`)
     return { success: true }
@@ -264,8 +262,8 @@ export async function changeQuoteStatusAction(
 }
 
 export async function deleteQuoteAction(id: string): Promise<ActionResult> {
-  const userId = await getAuthenticatedUserId()
-  if (!userId) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.quotes.delete)
+  if (!guard.user) return guard.error
 
   const quote = await prisma.quote.findFirst({
     where: { id, deletedAt: null },
@@ -290,6 +288,7 @@ export async function deleteQuoteAction(id: string): Promise<ActionResult> {
       data: { deletedAt: new Date() },
     })
 
+    void createAuditLog({ userId: guard.user.id, action: "DELETE", entity: "Quote", entityId: id }).catch(console.error)
     revalidatePath(QUOTES_PATH)
     return { success: true }
   } catch (error) {
@@ -302,8 +301,9 @@ export async function convertQuoteToProjectAction(
   quoteId: string,
   projectName: string,
 ): Promise<ActionResult<{ projectId: string }>> {
-  const userId = await getAuthenticatedUserId()
-  if (!userId) return { success: false, error: "Não autenticado" }
+  const guard = await requirePermission(PERMISSIONS.quotes.approve)
+  if (!guard.user) return guard.error
+  const userId = guard.user.id
 
   if (!projectName.trim()) {
     return { success: false, error: "Nome do projeto é obrigatório" }
@@ -353,6 +353,7 @@ export async function convertQuoteToProjectAction(
       },
     })
 
+    void createAuditLog({ userId, action: "CONVERT_TO_PROJECT", entity: "Quote", entityId: quoteId, newData: { projectId: project.id } }).catch(console.error)
     revalidatePath(QUOTES_PATH)
     revalidatePath(`${QUOTES_PATH}/${quoteId}`)
     return { success: true, data: { projectId: project.id } }
