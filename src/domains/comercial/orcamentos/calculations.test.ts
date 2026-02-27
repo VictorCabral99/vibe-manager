@@ -44,8 +44,9 @@ describe("calculateQuoteTotals", () => {
     const items = [{ productId: "p1", productName: "Item", quantity: 1, unitPrice: 1000 }]
     const result = calculateQuoteTotals(items, [], true)
     expect(result.subtotal).toBe(1000)
-    expect(result.fee).toBeCloseTo(150)
-    expect(result.total).toBeCloseTo(1150)
+    // bruto = 1000 / 0.85 ≈ 1176.47  →  fee ≈ 176.47  →  líquido = 1000 exato
+    expect(result.fee).toBeCloseTo(176.47, 2)
+    expect(result.total).toBeCloseTo(1176.47, 2)
   })
 
   it("não aplica taxa quando applyFee=false", () => {
@@ -60,13 +61,12 @@ describe("calculateQuoteTotals", () => {
     const services = [{ serviceId: "s1", serviceName: "Serviço", quantity: 1, unitPrice: 400 }]
     const result = calculateQuoteTotals(items, services, true)
     // subtotal = 600 + 400 = 1000
-    // fee = 1000 * 0.15 = 150
-    // total = 1150
+    // total = 1000 / 0.85 ≈ 1176.47  →  fee ≈ 176.47  →  líquido = 1000 exato
     expect(result.subtotalItems).toBe(600)
     expect(result.subtotalServices).toBe(400)
     expect(result.subtotal).toBe(1000)
-    expect(result.fee).toBeCloseTo(150)
-    expect(result.total).toBeCloseTo(1150)
+    expect(result.fee).toBeCloseTo(176.47, 2)
+    expect(result.total).toBeCloseTo(1176.47, 2)
   })
 
   it("lida com quantidades fracionadas", () => {

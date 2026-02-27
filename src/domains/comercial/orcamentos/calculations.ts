@@ -25,8 +25,10 @@ export function calculateQuoteTotals(
   )
 
   const subtotal = subtotalItems + subtotalServices
-  const fee = applyFee ? subtotal * FEE_RATE : 0
-  const total = subtotal + fee
+  // O imposto incide sobre o valor bruto da nota, não sobre o líquido.
+  // bruto = liquido / (1 - taxa)  →  garante que bruto - imposto = liquido exato
+  const total = applyFee ? subtotal / (1 - FEE_RATE) : subtotal
+  const fee = total - subtotal
 
   return {
     subtotalItems,

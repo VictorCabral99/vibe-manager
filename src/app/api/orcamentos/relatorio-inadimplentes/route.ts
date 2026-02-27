@@ -29,7 +29,7 @@ function calcTotal(
   const sub =
     q.items.reduce((s, i) => s + i.total.toNumber(), 0) +
     q.services.reduce((s, sv) => s + sv.total.toNumber(), 0)
-  return q.applyFee ? sub * 1.15 : sub
+  return q.applyFee ? sub / (1 - 0.15) : sub
 }
 
 export async function GET(): Promise<NextResponse> {
